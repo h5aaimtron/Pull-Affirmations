@@ -71,7 +71,6 @@ jobs:
           const isFork = pr.head.repo.full_name !== pr.base.repo.full_name;
           if (isFork) {
             core.notice(`✅ Fork PR passed! Here's your affirmation:\n${affirmation}`);
-            return;
           }
 
           // Comment on PR (same-repo only)
