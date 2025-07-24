@@ -5,35 +5,35 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
-  pull-requests: write
   contents: read
-  issues: write
+  pull-requests: read
+  issues: read
 
 jobs:
   validate-and-affirm:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
+    - name: Checkout base branch to read affirmations
       uses: actions/checkout@v4
       with:
         ref: ${{ github.event.pull_request.base.ref }}
 
-    - name: Validate PR and comment with affirmation
+    - name: Validate PR and optionally affirm
       uses: actions/github-script@v7
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
         script: |
           const fs = require('fs');
-          const path = 'affirmations.txt';
+          const pr = context.payload.pull_request;
 
-          // Ensure affirmations.txt exists
+          // Check for affirmations.txt
+          const path = 'affirmations.txt';
           if (!fs.existsSync(path)) {
             core.setFailed("affirmations.txt not found in the base branch.");
             return;
           }
 
-          // Load and pick a random affirmation
           const lines = fs.readFileSync(path, 'utf-8')
                           .split(/\r?\n/)
                           .filter(line => line.trim() !== '');
@@ -41,10 +41,10 @@ jobs:
             core.setFailed("affirmations.txt is empty.");
             return;
           }
-          const randomLine = lines[Math.floor(Math.random() * lines.length)];
 
-          // Validate PR file types and size
-          const pr = context.payload.pull_request;
+          const affirmation = lines[Math.floor(Math.random() * lines.length)];
+
+          // Validate file list and size
           const { data: files } = await github.rest.pulls.listFiles({
             owner: context.repo.owner,
             repo: context.repo.repo,
@@ -67,15 +67,22 @@ jobs:
             return;
           }
 
-          // Post the affirmation as a comment
+          // If from a fork, log instead of commenting
+          const isFork = pr.head.repo.full_name !== pr.base.repo.full_name;
+          if (isFork) {
+            core.notice(`✅ Fork PR passed! Here's your affirmation:\n${affirmation}`);
+            return;
+          }
+
+          // Comment on PR (same-repo only)
           await github.rest.issues.createComment({
             owner: context.repo.owner,
             repo: context.repo.repo,
             issue_number: pr.number,
-            body: `✅ ${randomLine}`
+            body: `✅ ${affirmation}`
           });
 
-          // Optionally, label the PR
+          // Optional: Add a label
           await github.rest.issues.addLabels({
             owner: context.repo.owner,
             repo: context.repo.repo,
