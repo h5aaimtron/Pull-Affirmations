@@ -1,0 +1,79 @@
+name: Auto-affirm txt PRs
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  validate-and-affirm:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.base.ref }}
+
+    - name: Validate PR and comment with affirmation
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const fs = require('fs');
+          const path = 'affirmations.txt';
+
+          // Ensure affirmations.txt exists
+          if (!fs.existsSync(path)) {
+            core.setFailed("affirmations.txt not found in the base branch.");
+            return;
+          }
+
+          // Load and pick a random affirmation
+          const lines = fs.readFileSync(path, 'utf-8')
+                          .split(/\r?\n/)
+                          .filter(line => line.trim() !== '');
+          if (lines.length === 0) {
+            core.setFailed("affirmations.txt is empty.");
+            return;
+          }
+          const randomLine = lines[Math.floor(Math.random() * lines.length)];
+
+          // Validate PR file types and size
+          const pr = context.payload.pull_request;
+          const { data: files } = await github.rest.pulls.listFiles({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: pr.number
+          });
+
+          let totalSize = 0;
+          for (const file of files) {
+            if (!file.filename.endsWith('.txt')) {
+              core.setFailed(`❌ Non-txt file found: ${file.filename}`);
+              return;
+            }
+            if (file.status !== 'removed') {
+              totalSize += file.changes || 0;
+            }
+          }
+
+          if (totalSize > 5120) {
+            core.setFailed(`❌ Total txt file size exceeds 5KB (${totalSize} bytes)`);
+            return;
+          }
+
+          // Post the affirmation as a comment
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: pr.number,
+            body: `✅ ${randomLine}`
+          });
+
+          // Optionally, label the PR
+          await github.rest.issues.addLabels({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: pr.number,
+            labels: ['auto-affirmed']
+          });
