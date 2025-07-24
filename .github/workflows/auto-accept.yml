@@ -89,3 +89,11 @@ jobs:
             issue_number: pr.number,
             labels: ['auto-affirmed']
           });
+
+          // Closes the PR with green check.
+          await github.rest.pulls.update({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: pr.number,
+            state: "closed"
+          });
