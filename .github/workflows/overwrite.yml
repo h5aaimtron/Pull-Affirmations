@@ -1,0 +1,46 @@
+name: Overwrite data.txt on PR approval
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  overwrite-data-txt:
+    if: github.event.review.state == 'approved'
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout base branch
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.base.ref }}
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Fetch PR branch
+      run: |
+        git fetch origin +refs/pull/${{ github.event.pull_request.number }}/head:pr-branch
+
+    - name: Replace data.txt with PR version
+      run: |
+        git checkout pr-branch -- data.txt
+
+    - name: Check data.txt file size is <= 5KB
+      run: |
+        size=$(wc -c < data.txt)
+        echo "File size: $size bytes"
+        if [ "$size" -gt 5120 ]; then
+          echo "❌ data.txt exceeds 5KB limit."
+          exit 1
+        fi
+
+    - name: Commit and push changes
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git add data.txt
+        git commit -m "🔄 Replace data.txt from PR #${{ github.event.pull_request.number }}"
+        git push origin ${{ github.event.pull_request.base.ref }}
